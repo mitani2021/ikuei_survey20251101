@@ -1,0 +1,71 @@
+<!doctype html>
+});
+return chart;
+}
+
+
+function updateCharts() {
+if (issuesChart) issuesChart.destroy();
+if (candsChart) candsChart.destroy();
+// すでに server 側で降順ソート済みだが、念のため
+const issuesSorted = [...state.issues].sort((a,b)=>b.count-a.count);
+const candsSorted = [...state.candidates].sort((a,b)=>b.count-a.count);
+issuesChart = renderChart('issuesChart', '設問２：重要だと考える問題', issuesSorted);
+candsChart = renderChart('candsChart', '設問３：支持候補', candsSorted);
+}
+
+
+function downloadCSV() {
+// 2セクションを1つのCSVにまとめる
+const lines = [];
+lines.push('Section,Label,Count');
+state.issues.forEach(r => lines.push(`Issues,${r.label.replaceAll(',', '、')},${r.count}`));
+state.candidates.forEach(r => lines.push(`Candidates,${r.label.replaceAll(',', '、')},${r.count}`));
+const csv = '\ufeff' + lines.join('\n'); // UTF-8 BOM 付き
+const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url; a.download = 'mitani_survey_summary.csv'; a.click();
+URL.revokeObjectURL(url);
+}
+
+
+async function resetAll() {
+if (!confirm('本当に全件リセットしますか？この操作は元に戻せません。')) return;
+const res = await fetch(API_URL, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ action: 'reset', token: RESET_TOKEN })
+});
+const data = await res.json();
+if (data && data.ok) {
+document.getElementById('status').textContent = 'リセットしました。';
+await refresh();
+} else {
+document.getElementById('status').textContent = 'リセット失敗：' + (data.error || 'unknown');
+}
+}
+
+
+async function refresh() {
+document.getElementById('status').textContent = '更新中…';
+try {
+await fetchData();
+updateCharts();
+document.getElementById('status').textContent = `集計完了（回答数：${state.total}）`;
+} catch (e) {
+document.getElementById('status').textContent = '取得エラー：' + e.message;
+}
+}
+
+
+document.getElementById('refreshBtn').addEventListener('click', refresh);
+document.getElementById('csvBtn').addEventListener('click', downloadCSV);
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+
+// 初回ロード
+refresh();
+</script>
+</body>
+</html>

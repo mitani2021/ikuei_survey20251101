@@ -1,0 +1,81 @@
+<!doctype html>
+<label><input type="radio" name="issue" value="住民税の負担がこれ以上、増えないこと。" required> ３．住民税の負担がこれ以上、増えないこと。</label>
+<label><input type="radio" name="issue" value="ミタニ市のゴミの排出量を減らすこと。" required> ４．ミタニ市のゴミの排出量を減らすこと。</label>
+</div>
+
+
+<!-- 設問3 -->
+<label>設問３：あなたは、どの候補者を支持していますか？</label>
+<div class="choices">
+<label><input type="radio" name="candidate" value="神崎豪" required> １．神崎豪</label>
+<label><input type="radio" name="candidate" value="風間裕也" required> ２．風間裕也</label>
+<label><input type="radio" name="candidate" value="姫島ノエル" required> ３．姫島ノエル</label>
+</div>
+
+
+<button id="submitBtn" type="submit">送信する</button>
+<div id="status" aria-live="polite"></div>
+</form>
+
+
+<p class="footer">集計結果ページ：<a href="results.html">results.html</a></p>
+</div>
+
+
+<script>
+// ★ Apps Script の Web アプリ URL を貼る
+const API_URL = 'https://script.google.com/macros/s/XXXXXXXXXXXXXXXXXXXXXXXX/exec';
+
+
+const form = document.getElementById('survey-form');
+const statusEl = document.getElementById('status');
+const submitBtn = document.getElementById('submitBtn');
+
+
+form.addEventListener('submit', async (e) => {
+e.preventDefault();
+statusEl.textContent = '';
+
+
+const district = document.getElementById('district').value;
+const issue = (new FormData(form)).get('issue');
+const candidate = (new FormData(form)).get('candidate');
+
+
+if (!district || !issue || !candidate) {
+statusEl.textContent = '未入力の項目があります。';
+statusEl.className = 'error';
+return;
+}
+
+
+submitBtn.disabled = true;
+submitBtn.textContent = '送信中…';
+
+
+try {
+const res = await fetch(API_URL, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ action: 'submit', district, issue, candidate })
+});
+const data = await res.json();
+if (data.ok) {
+statusEl.textContent = 'ご協力ありがとうございました！';
+statusEl.className = 'success';
+form.reset();
+} else {
+statusEl.textContent = '送信エラー：' + (data.error || 'unknown');
+statusEl.className = 'error';
+}
+} catch (err) {
+statusEl.textContent = '通信に失敗しました。ネットワークをご確認ください。';
+statusEl.className = 'error';
+} finally {
+submitBtn.disabled = false;
+submitBtn.textContent = '送信する';
+}
+});
+</script>
+</body>
+</html>
