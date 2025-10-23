@@ -1,71 +1,80 @@
 <!doctype html>
-});
-return chart;
+const sortedIssues = sortDesc(issuesData);
+const sortedCands = sortDesc(candsData);
+const iLabels = sortedIssues.map(o=>o.label);
+const iCounts = sortedIssues.map(o=>o.count);
+const cLabels = sortedCands.map(o=>o.label);
+const cCounts = sortedCands.map(o=>o.count);
+if(issuesChart) issuesChart.destroy();
+if(candsChart) candsChart.destroy();
+issuesChart = toHorizontalBar(document.getElementById('issuesChart'), iLabels, iCounts);
+candsChart = toHorizontalBar(document.getElementById('candsChart'), cLabels, cCounts);
+setStatus(`集計完了：回答総数 ≈ ${iCounts.reduce((a,b)=>a+b,0)} 件`);
 }
 
 
-function updateCharts() {
-if (issuesChart) issuesChart.destroy();
-if (candsChart) candsChart.destroy();
-// すでに server 側で降順ソート済みだが、念のため
-const issuesSorted = [...state.issues].sort((a,b)=>b.count-a.count);
-const candsSorted = [...state.candidates].sort((a,b)=>b.count-a.count);
-issuesChart = renderChart('issuesChart', '設問２：重要だと考える問題', issuesSorted);
-candsChart = renderChart('candsChart', '設問３：支持候補', candsSorted);
+async function load(){
+try{
+const {issues, candidates} = await fetchStats();
+issuesData = issues; candsData = candidates; renderCharts();
+}catch(e){
+console.error(e); setStatus('集計の取得に失敗しました。GASの応答形式（action=stats/export/list）をご確認ください。');
+}
 }
 
 
-function downloadCSV() {
-// 2セクションを1つのCSVにまとめる
-const lines = [];
-lines.push('Section,Label,Count');
-state.issues.forEach(r => lines.push(`Issues,${r.label.replaceAll(',', '、')},${r.count}`));
-state.candidates.forEach(r => lines.push(`Candidates,${r.label.replaceAll(',', '、')},${r.count}`));
-const csv = '\ufeff' + lines.join('\n'); // UTF-8 BOM 付き
-const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+refreshBtn.addEventListener('click', load);
+
+
+// --- CSV出力（フロント生成） ---
+exportBtn.addEventListener('click', ()=>{
+const rows = [
+['カテゴリ','項目','票数'],
+...sortDesc(issuesData).map(o=>['問題', o.label, o.count]),
+...sortDesc(candsData).map(o=>['候補', o.label, o.count])
+];
+const csv = rows.map(r=> r.map(cell=>{
+const s = String(cell ?? '');
+return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}).join(',')).join('\n');
+const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
 const url = URL.createObjectURL(blob);
 const a = document.createElement('a');
-a.href = url; a.download = 'mitani_survey_summary.csv'; a.click();
+a.href = url; a.download = 'mitani_city_poll_results.csv';
+document.body.appendChild(a); a.click(); a.remove();
 URL.revokeObjectURL(url);
-}
-
-
-async function resetAll() {
-if (!confirm('本当に全件リセットしますか？この操作は元に戻せません。')) return;
-const res = await fetch(API_URL, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ action: 'reset', token: RESET_TOKEN })
 });
-const data = await res.json();
-if (data && data.ok) {
-document.getElementById('status').textContent = 'リセットしました。';
-await refresh();
-} else {
-document.getElementById('status').textContent = 'リセット失敗：' + (data.error || 'unknown');
+
+
+// --- リセット ---
+resetBtn.addEventListener('click', async ()=>{
+if(!confirm('集計をリセットします。よろしいですか？')) return;
+setStatus('リセット実行中…');
+try{
+// JSON POST → URL-Encoded → GET の順に試す
+const payload = {action:'reset'}; if(ADMIN_KEY) payload.adminKey = ADMIN_KEY;
+// JSON
+let r = await fetch(WEB_APP_URL, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+if(!r.ok){
+// form-encoded
+const body = new URLSearchParams(payload);
+r = await fetch(WEB_APP_URL, {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body});
 }
+if(!r.ok){
+// GET fallback
+const qs = new URLSearchParams(payload).toString();
+r = await fetch(`${WEB_APP_URL}?${qs}`);
 }
-
-
-async function refresh() {
-document.getElementById('status').textContent = '更新中…';
-try {
-await fetchData();
-updateCharts();
-document.getElementById('status').textContent = `集計完了（回答数：${state.total}）`;
-} catch (e) {
-document.getElementById('status').textContent = '取得エラー：' + e.message;
+if(!r.ok) throw new Error('reset failed');
+setStatus('リセットしました。');
+await load();
+}catch(e){
+console.error(e); setStatus('リセットに失敗しました。GAS側の実装をご確認ください。');
 }
-}
+});
 
 
-document.getElementById('refreshBtn').addEventListener('click', refresh);
-document.getElementById('csvBtn').addEventListener('click', downloadCSV);
-document.getElementById('resetBtn').addEventListener('click', resetAll);
-
-
-// 初回ロード
-refresh();
+load();
 </script>
 </body>
 </html>
