@@ -1,80 +1,71 @@
 <!doctype html>
-<label><input type="radio" name="issue" value="住民税の負担がこれ以上、増えないこと。" required> ３．住民税の負担がこれ以上、増えないこと。</label>
-<label><input type="radio" name="issue" value="ミタニ市のゴミの排出量を減らすこと。" required> ４．ミタニ市のゴミの排出量を減らすこと。</label>
-</div>
+<option>神崎豪</option>
+<option>風間裕也</option>
+<option>姫島ノエル</option>
+</select>
 
 
-<!-- 設問3 -->
-<label>設問３：あなたは、どの候補者を支持していますか？</label>
-<div class="choices">
-<label><input type="radio" name="candidate" value="神崎豪" required> １．神崎豪</label>
-<label><input type="radio" name="candidate" value="風間裕也" required> ２．風間裕也</label>
-<label><input type="radio" name="candidate" value="姫島ノエル" required> ３．姫島ノエル</label>
-</div>
-
-
+<div class="row">
 <button id="submitBtn" type="submit">送信する</button>
-<div id="status" aria-live="polite"></div>
+<a href="results.html" style="text-decoration:none"><button type="button" style="background:#111827">集計を見る</button></a>
+</div>
+<div id="ok" class="msg ok">ご協力ありがとうございます。回答を記録しました。</div>
+<div id="er" class="msg err">送信に失敗しました。しばらくしてから再度お試しください。</div>
+<p class="foot">※個人情報は取得しません。必要に応じてIP重複などの制御はGAS側で行ってください。</p>
 </form>
-
-
-<p class="footer">集計結果ページ：<a href="results.html">results.html</a></p>
+</div>
 </div>
 
 
 <script>
-// ★ Apps Script の Web アプリ URL を貼る
-const API_URL = 'https://script.google.com/macros/s/XXXXXXXXXXXXXXXXXXXXXXXX/exec';
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbycx9SQFmWzeh2RTJuSLfK-laB6_68olzggVoCMGK9ZJK6jwSKsGEgECxQvlEJtDeco1g/exec";
 
 
-const form = document.getElementById('survey-form');
-const statusEl = document.getElementById('status');
-const submitBtn = document.getElementById('submitBtn');
+const form = document.getElementById('poll-form');
+const ok = document.getElementById('ok');
+const er = document.getElementById('er');
+const btn = document.getElementById('submitBtn');
 
 
-form.addEventListener('submit', async (e) => {
+function showMsg(el){el.style.display='block'; setTimeout(()=>el.style.display='none', 4000)}
+
+
+async function trySubmit(payload){
+// 1) JSON POST（推奨）
+try{
+const r = await fetch(WEB_APP_URL, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'submit', ...payload})});
+if(r.ok){return await r.json().catch(()=>({ok:true}))}
+}catch(e){}
+// 2) フォームURLエンコードPOST
+try{
+const body = new URLSearchParams({action:'submit', ...payload});
+const r = await fetch(WEB_APP_URL, {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body});
+if(r.ok){return await r.json().catch(()=>({ok:true}))}
+}catch(e){}
+// 3) GET クエリ
+const qs = new URLSearchParams({action:'submit', ...payload}).toString();
+const r = await fetch(`${WEB_APP_URL}?${qs}`);
+if(r.ok){try{return await r.json()}catch(e){return {ok:true}}}
+throw new Error('submit failed');
+}
+
+
+form.addEventListener('submit', async (e)=>{
 e.preventDefault();
-statusEl.textContent = '';
-
-
-const district = document.getElementById('district').value;
-const issue = (new FormData(form)).get('issue');
-const candidate = (new FormData(form)).get('candidate');
-
-
-if (!district || !issue || !candidate) {
-statusEl.textContent = '未入力の項目があります。';
-statusEl.className = 'error';
-return;
-}
-
-
-submitBtn.disabled = true;
-submitBtn.textContent = '送信中…';
-
-
-try {
-const res = await fetch(API_URL, {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ action: 'submit', district, issue, candidate })
-});
-const data = await res.json();
-if (data.ok) {
-statusEl.textContent = 'ご協力ありがとうございました！';
-statusEl.className = 'success';
-form.reset();
-} else {
-statusEl.textContent = '送信エラー：' + (data.error || 'unknown');
-statusEl.className = 'error';
-}
-} catch (err) {
-statusEl.textContent = '通信に失敗しました。ネットワークをご確認ください。';
-statusEl.className = 'error';
-} finally {
-submitBtn.disabled = false;
-submitBtn.textContent = '送信する';
-}
+ok.style.display=er.style.display='none';
+btn.disabled=true; btn.textContent='送信中…';
+const payload = {
+district: document.getElementById('district').value,
+issue: document.getElementById('issue').value,
+candidate: document.getElementById('candidate').value,
+ts: new Date().toISOString()
+};
+try{
+await trySubmit(payload);
+showMsg(ok); form.reset();
+}catch(err){
+console.error(err); showMsg(er);
+}finally{ btn.disabled=false; btn.textContent='送信する'; }
 });
 </script>
 </body>
